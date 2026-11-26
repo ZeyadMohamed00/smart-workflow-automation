@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16
+    environment: {POSTGRES_PASSWORD: pw, POSTGRES_DB: wf}
+  api:
+    build: .
+    environment: {DATABASE_URL: "postgresql+psycopg2://postgres:pw@db/wf"}
+    ports: ["8000:8000"]
+    depends_on: [db]
+  worker:
+    build: .
+    command: python -c "import time; from wf.db import Session, init; from wf.engine import tick; init(); [ (tick(Session().__enter__()), time.sleep(5)) for _ in iter(int, 1) ]"
+    environment: {DATABASE_URL: "postgresql+psycopg2://postgres:pw@db/wf"}
+    depends_on: [db]

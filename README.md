@@ -1,0 +1,45 @@
+# Smart Workflow Automation Platform
+
+Define workflows with a trigger (webhook, schedule, manual), conditions, and actions (including AI-style text classification). Executions are queued in PostgreSQL, run by a worker with retry and exponential backoff, and every step is stored in an execution history. FastAPI + PostgreSQL + React/TypeScript.
+
+**Live demo (free tier):** https://wf-web-lac.vercel.app  (click "Send test webhook", then look at Execution history)
+API docs: https://wf-api-gamma.vercel.app/docs
+
+![execution history with retries](docs/screenshot-history.png)
+
+## How it works
+```
+webhook POST /hooks/{token} | manual run | schedule due (worker tick)
+   -> INSERT execution(status=queued)
+worker tick: claim queued rows (SELECT ... FOR UPDATE SKIP LOCKED)
+   -> conditions match? no -> skipped
+   -> actions in order; each action retried up to 3 times with 0.2s, 0.4s backoff
+   -> succeeded | failed (error + every attempt stored in steps)
+```
+- Conditions: `eq, neq, gt, lt, contains` on payload fields (a missing field or a bad number means "no match").
+- Actions: `classify` (billing / bug / feature_request / other), `set_field`, `log`, `notify` (records only), `flaky` (a deliberately unreliable dependency to demonstrate retries).
+- Each visitor gets private sample workflows; the UI has a small builder for new ones.
+
+## Honest status (differences from the plan)
+- **No Celery and no Redis.** They cannot run on a free serverless host. The queue is a Postgres table and the worker is `engine.tick()`. `FOR UPDATE SKIP LOCKED` makes it safe to run many workers, so swapping in Celery workers later is a small change, but I have **not** done or tested that.
+- **The worker runs when triggered**: by the UI button (the "Send test webhook" button also runs a tick), by `/worker/tick`, and by a Vercel Cron job (`/cron/tick`, once a day on the free plan, protected by `CRON_SECRET`). So schedules fire at most daily on the live demo, not on a real minute-level clock. A dedicated worker process (`python -c "from wf.engine import tick"` in a loop) would fix that, and is not deployed.
+- **"AI classification" is a keyword-score classifier**, not an LLM. No API key was available. It is labeled as such in the UI. It is a simple heuristic and will mislabel anything outside its keyword lists.
+- The `notify` action only records a line; the demo sends no emails or messages. There is no outbound HTTP action (deliberate, to avoid SSRF on a public demo).
+- Webhook URLs contain a random token; there is no signature verification or per-user login. Visitors are separated by a browser id only.
+- Docker files are not verified (no Docker here). CI file lives in `ci/` (push token lacked workflow scope).
+- Tests: 9 backend (real PostgreSQL, covering conditions, classifier, webhook-to-history, skip/match, retry then success, permanent failure after 3 attempts, schedule once per interval, validation, isolation, cron secret) and 2 frontend. No load testing was done.
+
+## Run
+```bash
+pip install -r requirements.txt pgserver
+DATABASE_URL=postgresql+psycopg2://user:pw@host/db uvicorn wf.main:app
+cd frontend && npm i && npm run dev
+pytest
+```
+
+## 5 things to understand to explain this project
+1. **Queue in the database**: enqueue = insert a row; workers claim rows with `FOR UPDATE SKIP LOCKED`, so two workers never run the same execution.
+2. **Retries with exponential backoff**: transient failures are retried (0.2s, 0.4s), a permanent failure stops the workflow and keeps every attempt in the history.
+3. **Conditions before actions**: a trigger that does not match is recorded as `skipped`, not silently dropped.
+4. **Triggers**: webhooks enqueue immediately; schedules are enqueued by the worker tick when due, so timing depends on how often the worker runs.
+5. **Honest limits**: no Celery/Redis, keyword "AI", daily cron on the free plan. I know exactly what would change in production: a real worker process, a real broker, an LLM classifier, signed webhooks.
