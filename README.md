@@ -5,7 +5,10 @@ Define workflows with a trigger (webhook, schedule, manual), conditions, and act
 **Live demo (free tier):** https://wf-web-lac.vercel.app  (click "Send test webhook", then look at Execution history)
 API docs: https://wf-api-gamma.vercel.app/docs
 
-![execution history with retries](docs/screenshot-history.png)
+![overview](docs/screenshot-overview.png)
+![execution detail with step timeline](docs/screenshot-history.png)
+
+Pages: Overview, Workflows (editable JSON test payload), Builder (templates, multiple conditions, ordered actions), Execution history (filters, search, step timeline), Webhooks (copy curl).
 
 ## How it works
 ```
