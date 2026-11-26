@@ -68,3 +68,7 @@ pytest
 - **Guest demo:** without logging in, "Continue as guest" uses an anonymous browser id with clearly labeled sample data. Guest ids can never collide with or impersonate an account.
 - Tests: `tests/test_auth.py` (register, login, wrong or weak password, duplicate email, bad token, isolation) and `frontend/src/auth.test.tsx`.
 - Not built: email verification, password reset, rate limiting and refresh tokens (listed as next steps).
+
+## Database migrations
+
+Schema changes are versioned with Alembic (`migrations/`, baseline `0001`). Point `DATABASE_URL` at the database and run `alembic upgrade head`. The baseline was generated from the models and checked by running upgrade, downgrade and upgrade again on SQLite; I did not run it against a fresh PostgreSQL instance here. The running app still creates missing tables on start.

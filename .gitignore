@@ -5,3 +5,4 @@ frontend/dist
 .vercel
 .env*
 .pytest_cache/
+migration_check.db
