@@ -7,6 +7,8 @@ from sqlalchemy import func
 
 from . import db as D
 from . import engine as E
+from .auth import identity
+from .auth import router as auth_router
 
 
 def get_db():
@@ -14,10 +16,8 @@ def get_db():
         yield s
 
 
-def client(x_client_id: str = Header(default="")):
-    if not (8 <= len(x_client_id) <= 64) or not x_client_id.replace("-", "").isalnum():
-        raise HTTPException(400, "Missing or invalid X-Client-Id header")
-    return x_client_id
+def client(authorization: str = Header(default=""), x_client_id: str = Header(default="")):
+    return identity(authorization, x_client_id)
 
 
 class Condition(BaseModel):
@@ -71,6 +71,7 @@ def ex_out(e):
 def create_app():
     D.init()
     app = FastAPI(title="Smart Workflow Automation", version="1.0.0")
+    app.include_router(auth_router)
     app.add_middleware(
         CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
     )

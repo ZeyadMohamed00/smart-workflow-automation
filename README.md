@@ -59,3 +59,10 @@ pytest
 3. **Conditions before actions**: a trigger that does not match is recorded as `skipped`, not silently dropped.
 4. **Triggers**: webhooks enqueue immediately; schedules are enqueued by the worker tick when due, so timing depends on how often the worker runs.
 5. **Honest limits**: no Celery/Redis, keyword "AI", daily cron on the free plan. I know exactly what would change in production: a real worker process, a real broker, an LLM classifier, signed webhooks.
+
+## Accounts and persistence
+- **Real accounts:** `POST /auth/register`, `POST /auth/login`, `GET /auth/me`. Passwords are salted PBKDF2-SHA256 hashes; sessions are signed JWTs (7 days) sent as `Authorization: Bearer`. Set `JWT_SECRET` in production; if it is unset, a secret is derived from `DATABASE_URL`.
+- **Persistence:** a signed-in user's data is stored in PostgreSQL under their own account key (`user:<id>`) and is only reachable with their token. New accounts start empty.
+- **Guest demo:** without logging in, "Continue as guest" uses an anonymous browser id with clearly labeled sample data. Guest ids can never collide with or impersonate an account.
+- Tests: `tests/test_auth.py` (register, login, wrong or weak password, duplicate email, bad token, isolation) and `frontend/src/auth.test.tsx`.
+- Not built: email verification, password reset, rate limiting and refresh tokens (listed as next steps).
