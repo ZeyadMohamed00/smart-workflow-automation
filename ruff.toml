@@ -5,3 +5,6 @@ extend-exclude = ["frontend", "node_modules", "models"]
 [lint]
 select = ["E", "F", "W", "I", "B", "UP"]
 ignore = ["E501","B008","E402","E731","E741","B904","B028","B905","B007"]
+
+[lint.per-file-ignores]
+"index.py" = ["F401"]
