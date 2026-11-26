@@ -33,9 +33,10 @@ export const api = {
   create: (w: unknown) => req<Workflow>("/workflows", "POST", w),
   remove: (id: number) => req<void>(`/workflows/${id}`, "DELETE"),
   toggle: (id: number, enabled: boolean) => req<Workflow>(`/workflows/${id}?enabled=${enabled}`, "PATCH", {}),
-  runManual: (id: number) => req<Execution>(`/workflows/${id}/run`, "POST", {}),
+  runManual: (id: number, payload: unknown = {}) => req<Execution>(`/workflows/${id}/run`, "POST", payload),
   hook: (path: string, payload: unknown) => req<{ execution_id: number }>(path, "POST", payload, false),
   tick: () => req<{ scheduled: number; processed: number }>("/worker/tick", "POST", {}),
   executions: () => req<Execution[]>("/executions"),
+  stats: () => req<{ by_status: Record<string, number>; total: number }>("/stats"),
   reset: () => req<void>("/demo/reset", "POST", {}),
 };
