@@ -1,8 +1,10 @@
 import os
-from fastapi import FastAPI, Depends, Header, HTTPException, Request
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy import func
+
 from . import db as D
 from . import engine as E
 
@@ -41,19 +43,37 @@ class WorkflowIn(BaseModel):
 
 
 def wf_out(w):
-    return {"id": w.id, "name": w.name, "trigger_type": w.trigger_type, "interval_minutes": w.interval_minutes, "conditions": w.conditions,
-            "actions": w.actions, "enabled": w.enabled, "webhook_path": f"/hooks/{w.token}" if w.trigger_type == "webhook" else None}
+    return {
+        "id": w.id,
+        "name": w.name,
+        "trigger_type": w.trigger_type,
+        "interval_minutes": w.interval_minutes,
+        "conditions": w.conditions,
+        "actions": w.actions,
+        "enabled": w.enabled,
+        "webhook_path": f"/hooks/{w.token}" if w.trigger_type == "webhook" else None,
+    }
 
 
 def ex_out(e):
-    return {"id": e.id, "workflow_id": e.workflow_id, "trigger": e.trigger, "status": e.status, "payload": e.payload, "steps": e.steps,
-            "error": e.error, "created_at": e.created_at.isoformat() if e.created_at else None}
+    return {
+        "id": e.id,
+        "workflow_id": e.workflow_id,
+        "trigger": e.trigger,
+        "status": e.status,
+        "payload": e.payload,
+        "steps": e.steps,
+        "error": e.error,
+        "created_at": e.created_at.isoformat() if e.created_at else None,
+    }
 
 
 def create_app():
     D.init()
     app = FastAPI(title="Smart Workflow Automation", version="1.0.0")
-    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+    app.add_middleware(
+        CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+    )
     fast = lambda: dict(base_delay=float(os.getenv("RETRY_BASE_DELAY", "0.2")))
 
     @app.get("/health")
@@ -63,7 +83,9 @@ def create_app():
     @app.get("/workflows")
     def list_workflows(cid: str = Depends(client), db=Depends(get_db)):
         D.ensure_seed(db, cid)
-        return [wf_out(w) for w in db.query(D.Workflow).filter_by(client_id=cid).order_by(D.Workflow.id)]
+        return [
+            wf_out(w) for w in db.query(D.Workflow).filter_by(client_id=cid).order_by(D.Workflow.id)
+        ]
 
     @app.post("/workflows", status_code=201)
     def create_workflow(body: WorkflowIn, cid: str = Depends(client), db=Depends(get_db)):
@@ -71,9 +93,16 @@ def create_app():
             raise HTTPException(409, "Workflow limit (20) reached")
         if body.trigger_type == "schedule" and not body.interval_minutes:
             raise HTTPException(422, "schedule workflows need interval_minutes")
-        w = D.Workflow(client_id=cid, name=body.name, trigger_type=body.trigger_type, interval_minutes=body.interval_minutes,
-                       conditions=[c.model_dump() for c in body.conditions], actions=[a.model_dump(exclude_none=True) for a in body.actions])
-        db.add(w); db.commit()
+        w = D.Workflow(
+            client_id=cid,
+            name=body.name,
+            trigger_type=body.trigger_type,
+            interval_minutes=body.interval_minutes,
+            conditions=[c.model_dump() for c in body.conditions],
+            actions=[a.model_dump(exclude_none=True) for a in body.actions],
+        )
+        db.add(w)
+        db.commit()
         return wf_out(w)
 
     def own(db, cid, wid):
@@ -84,14 +113,20 @@ def create_app():
 
     @app.patch("/workflows/{wid}")
     def toggle(wid: int, enabled: bool, cid: str = Depends(client), db=Depends(get_db)):
-        w = own(db, cid, wid); w.enabled = enabled; db.commit(); return wf_out(w)
+        w = own(db, cid, wid)
+        w.enabled = enabled
+        db.commit()
+        return wf_out(w)
 
     @app.delete("/workflows/{wid}", status_code=204)
     def delete(wid: int, cid: str = Depends(client), db=Depends(get_db)):
-        db.delete(own(db, cid, wid)); db.commit()
+        db.delete(own(db, cid, wid))
+        db.commit()
 
     @app.post("/workflows/{wid}/run", status_code=202)
-    def run_manual(wid: int, payload: dict | None = None, cid: str = Depends(client), db=Depends(get_db)):
+    def run_manual(
+        wid: int, payload: dict | None = None, cid: str = Depends(client), db=Depends(get_db)
+    ):
         w = own(db, cid, wid)
         if not w.enabled:
             raise HTTPException(409, "Workflow is disabled")
@@ -124,11 +159,22 @@ def create_app():
 
     @app.get("/executions")
     def executions(cid: str = Depends(client), db=Depends(get_db)):
-        return [ex_out(e) for e in db.query(D.Execution).filter_by(client_id=cid).order_by(D.Execution.id.desc()).limit(30)]
+        return [
+            ex_out(e)
+            for e in db.query(D.Execution)
+            .filter_by(client_id=cid)
+            .order_by(D.Execution.id.desc())
+            .limit(30)
+        ]
 
     @app.get("/stats")
     def stats(cid: str = Depends(client), db=Depends(get_db)):
-        rows = dict(db.query(D.Execution.status, func.count()).filter_by(client_id=cid).group_by(D.Execution.status).all())
+        rows = dict(
+            db.query(D.Execution.status, func.count())
+            .filter_by(client_id=cid)
+            .group_by(D.Execution.status)
+            .all()
+        )
         return {"by_status": rows, "total": sum(rows.values())}
 
     @app.post("/demo/reset", status_code=204)

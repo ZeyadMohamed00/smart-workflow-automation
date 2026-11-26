@@ -10,6 +10,19 @@ API docs: https://wf-api-gamma.vercel.app/docs
 
 Pages: Overview, Workflows (editable JSON test payload), Builder (templates, multiple conditions, ordered actions), Execution history (filters, search, step timeline), Webhooks (copy curl).
 
+## System overview
+```mermaid
+flowchart LR
+  T1[Webhook] & T2[Manual run] & T3[Schedule] --> Q[(PostgreSQL queue: executions)]
+  Q -->|claim with FOR UPDATE SKIP LOCKED| W[Worker tick]
+  W --> CO{Conditions match?}
+  CO -->|no| SK[skipped]
+  CO -->|yes| AC[Run actions, up to 3 attempts with backoff]
+  AC --> H[(Execution history: every step stored)]
+```
+
+**Tech stack:** FastAPI, PostgreSQL, React, TypeScript, Pytest, Vitest, Docker.
+
 ## How it works
 ```
 webhook POST /hooks/{token} | manual run | schedule due (worker tick)
