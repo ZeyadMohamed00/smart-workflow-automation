@@ -42,7 +42,7 @@ worker tick: claim queued rows (SELECT ... FOR UPDATE SKIP LOCKED)
 - **"AI classification" is a keyword-score classifier**, not an LLM. No API key was available. It is labeled as such in the UI. It is a simple heuristic and will mislabel anything outside its keyword lists.
 - The `notify` action only records a line; the demo sends no emails or messages. There is no outbound HTTP action (deliberate, to avoid SSRF on a public demo).
 - Webhook URLs contain a random token; there is no signature verification or per-user login. Visitors are separated by a browser id only.
-- Docker files are not verified (no Docker here). CI file lives in `ci/` (push token lacked workflow scope).
+- Docker files are not verified (no Docker here). CI file lives in `.github/workflows/` (push token lacked workflow scope).
 - Tests: 9 backend (real PostgreSQL, covering conditions, classifier, webhook-to-history, skip/match, retry then success, permanent failure after 3 attempts, schedule once per interval, validation, isolation, cron secret) and 2 frontend. No load testing was done.
 
 ## Run
