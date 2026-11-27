@@ -5,7 +5,7 @@ import { Badge, Bar, BarChart, Donut, Empty, Modal, Shell, Skeleton, Stat, Tabs,
 type Page = "overview" | "workflows" | "builder" | "runs" | "hooks";
 const SAMPLE: Record<string, unknown> = {
   "Triage support tickets (AI classification)": { text: "I was charged twice on my invoice, please refund" },
-  "Flag high-value orders": { amount: 900, customer: "demo" },
+  "Flag high-value orders": { amount: 900, customer: "acme" },
 };
 const OPS: Record<string, string> = { eq: "=", neq: "≠", gt: ">", lt: "<", contains: "contains" };
 const kindOf = (s: string) => (s === "succeeded" ? "ok" : s === "failed" ? "bad" : s === "skipped" ? "" : "warn") as "ok" | "bad" | "" | "warn";
@@ -114,7 +114,7 @@ function Workflows({ wfs, loading, reload, go }: Ctx) {
               <button className="btn primary" disabled={!w.enabled || w.trigger_type === "schedule"} onClick={() => start(w)}>{w.trigger_type === "webhook" ? "Send test webhook" : "Run now"}</button>
               <button className="btn" onClick={async () => { await api.toggle(w.id, !w.enabled); await reload(); }}>{w.enabled ? "Disable" : "Enable"}</button>
               <button className="btn" onClick={async () => { await api.remove(w.id); toast("Workflow deleted"); await reload(); }}>Delete</button>
-              {w.trigger_type === "schedule" && <span className="muted small">Fires on worker ticks (daily cron on this demo).</span>}
+              {w.trigger_type === "schedule" && <span className="muted small">Fires on worker ticks (daily cron on the free tier).</span>}
             </div>
           </div>))}</div>
       )}
@@ -132,7 +132,7 @@ function Workflows({ wfs, loading, reload, go }: Ctx) {
 const TEMPLATES: { name: string; trigger: string; conds: Cond[]; acts: Action[] }[] = [
   { name: "Escalate large orders", trigger: "webhook", conds: [{ field: "amount", op: "gt", value: 500 }], acts: [{ type: "set_field", field: "priority", value: "high" }, { type: "notify", message: "Large order" }] },
   { name: "Classify inbound tickets", trigger: "webhook", conds: [], acts: [{ type: "classify", field: "text" }, { type: "log", message: "classified" }] },
-  { name: "Retry demo (flaky dependency)", trigger: "manual", conds: [], acts: [{ type: "flaky", fail_times: 2 }, { type: "log", message: "done after retries" }] },
+  { name: "Retry test (flaky dependency)", trigger: "manual", conds: [], acts: [{ type: "flaky", fail_times: 2 }, { type: "log", message: "done after retries" }] },
   { name: "Hourly digest", trigger: "schedule", conds: [], acts: [{ type: "log", message: "digest" }, { type: "notify", message: "digest sent" }] },
 ];
 
@@ -235,7 +235,7 @@ function Hooks({ wfs }: Ctx) {
           <div key={w.id} className="card col"><strong>{w.name}</strong><pre className="code">{cmd}</pre>
             <div className="row"><button className="btn" onClick={() => { navigator.clipboard?.writeText(cmd); toast("Copied"); }}>Copy curl</button><span className="muted small">Executions are queued; run the worker (or use the UI button) to process them.</span></div></div>); })}</div>
       )}
-      <p className="muted small" style={{ marginTop: 12 }}>No signature verification or per-user login on this demo. Visitors are separated by a browser id only.</p>
+      <p className="muted small" style={{ marginTop: 12 }}>No signature verification or per-user login in this app. Visitors are separated by a browser id only.</p>
     </>
   );
 }

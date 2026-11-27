@@ -32,6 +32,6 @@ test("shows the server error on a failed login", async () => {
 
 test("guest mode skips login", async () => {
   render(<AuthGate title="App"><p>secret area</p></AuthGate>);
-  await userEvent.click(screen.getByText("Continue as guest (demo data)"));
+  await userEvent.click(screen.getByText("Explore without signing up"));
   expect(screen.getByText("secret area")).toBeTruthy();
 });

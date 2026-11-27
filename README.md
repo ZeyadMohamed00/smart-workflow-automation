@@ -4,7 +4,7 @@
 
 Define workflows with a trigger (webhook, schedule, manual), conditions, and actions (including AI-style text classification). Executions are queued in PostgreSQL, run by a worker with retry and exponential backoff, and every step is stored in an execution history. FastAPI + PostgreSQL + React/TypeScript.
 
-**Live demo (free tier):** https://wf-web-lac.vercel.app  (click "Send test webhook", then look at Execution history)
+**Live app (free tier):** https://wf-web-lac.vercel.app  (click "Send test webhook", then look at Execution history)
 API docs: https://wf-api-gamma.vercel.app/docs
 
 ![overview](docs/screenshot-overview.png)
@@ -42,7 +42,7 @@ worker tick: claim queued rows (SELECT ... FOR UPDATE SKIP LOCKED)
 - **No Celery and no Redis.** They cannot run on a free serverless host. The queue is a Postgres table and the worker is `engine.tick()`. `FOR UPDATE SKIP LOCKED` makes it safe to run many workers, so swapping in Celery workers later is a small change, but I have **not** done or tested that.
 - **The worker runs when triggered**: by the UI button (the "Send test webhook" button also runs a tick), by `/worker/tick`, and by a Vercel Cron job (`/cron/tick`, once a day on the free plan, protected by `CRON_SECRET`). So schedules fire at most daily on the live demo, not on a real minute-level clock. A dedicated worker process (`python -c "from wf.engine import tick"` in a loop) would fix that, and is not deployed.
 - **"AI classification" is a keyword-score classifier**, not an LLM. No API key was available. It is labeled as such in the UI. It is a simple heuristic and will mislabel anything outside its keyword lists.
-- The `notify` action only records a line; the demo sends no emails or messages. There is no outbound HTTP action (deliberate, to avoid SSRF on a public demo).
+- The `notify` action only records a line; this app sends no emails or messages. There is no outbound HTTP action (deliberate, to avoid SSRF on a public app).
 - Webhook URLs contain a random token; there is no signature verification or per-user login. Visitors are separated by a browser id only.
 - Docker files are not verified (no Docker here). GitHub Actions CI runs the tests on every push (`.github/workflows/ci.yml`).
 - Tests: 13 backend (real PostgreSQL, covering conditions, classifier, webhook-to-history, skip/match, retry then success, permanent failure after 3 attempts, schedule once per interval, validation, isolation, cron secret) and 2 frontend. No load testing was done.
@@ -65,7 +65,7 @@ pytest
 ## Accounts and persistence
 - **Real accounts:** `POST /auth/register`, `POST /auth/login`, `GET /auth/me`. Passwords are salted PBKDF2-SHA256 hashes; sessions are signed JWTs (7 days) sent as `Authorization: Bearer`. Set `JWT_SECRET` in production; if it is unset, a secret is derived from `DATABASE_URL`.
 - **Persistence:** a signed-in user's data is stored in PostgreSQL under their own account key (`user:<id>`) and is only reachable with their token. New accounts start empty.
-- **Guest demo:** without logging in, "Continue as guest" uses an anonymous browser id with clearly labeled sample data. Guest ids can never collide with or impersonate an account.
+- **Guest session:** without logging in, "Explore without signing up" uses an anonymous browser id. Guest ids can never collide with or impersonate an account.
 - Tests: `tests/test_auth.py` (register, login, wrong or weak password, duplicate email, bad token, isolation) and `frontend/src/auth.test.tsx`.
 - Login is throttled: 5 wrong passwords per email in 5 minutes returns `429` with `Retry-After` (`LOGIN_MAX_FAILS`, `LOGIN_FAIL_WINDOW_S`). The counter lives in process memory, so each serverless instance counts separately; use a shared limiter for hard guarantees. With `APP_ENV=production` a missing `JWT_SECRET` stops the app at startup.
 - Not built: email verification, password reset and refresh tokens (listed as next steps).
@@ -84,4 +84,4 @@ SIG=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac "$SIGNING_KEY" -
 curl -X POST "$API/hooks/$TOKEN" -H "X-Webhook-Timestamp: $TS" -H "X-Webhook-Signature: sha256=$SIG" -d "$BODY"
 ```
 
-A bad signature or a timestamp older than 5 minutes returns `401` (replay protection). Unsigned calls still work by default so the demo button works; set `WEBHOOK_REQUIRE_SIGNATURE=1` to reject them. Covered by three tests in `tests/test_wf.py`. Code: `wf/signing.py`.
+A bad signature or a timestamp older than 5 minutes returns `401` (replay protection). Unsigned calls still work by default so the test button works; set `WEBHOOK_REQUIRE_SIGNATURE=1` to reject them. Covered by three tests in `tests/test_wf.py`. Code: `wf/signing.py`.

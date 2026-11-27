@@ -35,7 +35,7 @@ async function authCall(path: string, body: unknown): Promise<{ access_token: st
   return res.json();
 }
 
-const box: React.CSSProperties = { maxWidth: 380, margin: "8vh auto", padding: 24, borderRadius: 14, border: "1px solid rgba(128,128,128,.35)", background: "var(--card, var(--surface, #fff))", color: "inherit", display: "grid", gap: 12 };
+const _box: React.CSSProperties = { maxWidth: 380, margin: "8vh auto", padding: 24, borderRadius: 14, border: "1px solid rgba(128,128,128,.35)", background: "var(--card, var(--surface, #fff))", color: "inherit", display: "grid", gap: 12 };
 const field: React.CSSProperties = { display: "grid", gap: 4, fontSize: 13, textAlign: "left" };
 const input: React.CSSProperties = { padding: "9px 10px", borderRadius: 8, border: "1px solid rgba(128,128,128,.5)", background: "transparent", color: "inherit", font: "inherit" };
 const primary: React.CSSProperties = { padding: "10px 14px", borderRadius: 8, border: 0, background: "#4f46e5", color: "#fff", font: "inherit", cursor: "pointer" };
@@ -55,9 +55,9 @@ export function AuthGate({ title, children }: { title: string; children: ReactNo
     const user = getUser();
     return (
       <>
-        <div style={{ position: "fixed", top: 8, right: 8, zIndex: 1000, display: "flex", gap: 8, alignItems: "center", fontSize: 12, padding: "4px 8px", borderRadius: 999, border: "1px solid rgba(128,128,128,.4)", background: "var(--card, var(--surface, #fff))", color: "inherit" }}>
-          {token ? <span>{user?.name || user?.email || "Signed in"}</span> : <span>Guest demo (sample data)</span>}
-          <button style={{ ...ghost, padding: "2px 10px", fontSize: 12 }} onClick={logout}>{token ? "Log out" : "Sign in"}</button>
+        <div className="authpill">
+          {token ? <span>{user?.name || user?.email || "Signed in"}</span> : <span>Guest session</span>}
+          <button className="btn sm" onClick={logout}>{token ? "Log out" : "Sign in"}</button>
         </div>
         {children}
       </>
@@ -78,16 +78,33 @@ export function AuthGate({ title, children }: { title: string; children: ReactNo
   }
 
   return (
-    <form style={box} onSubmit={submit} aria-label="Account">
-      <h2 style={{ margin: 0 }}>{title}</h2>
-      <p style={{ margin: 0, fontSize: 13, opacity: 0.75 }}>{mode === "login" ? "Log in to your account." : "Create an account. Your data is saved to your own workspace."}</p>
-      {mode === "register" && <label style={field}>Name<input style={input} aria-label="Name" value={name} onChange={(e) => setName(e.target.value)} /></label>}
-      <label style={field}>Email<input style={input} aria-label="Email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-      <label style={field}>Password<input style={input} aria-label="Password" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} placeholder="8+ characters" required minLength={mode === "register" ? 8 : 1} value={password} onChange={(e) => setPassword(e.target.value)} /></label>
-      {error && <p role="alert" style={{ margin: 0, color: "#dc2626", fontSize: 13 }}>{error}</p>}
-      <button style={primary} type="submit" disabled={busy}>{busy ? "Please wait..." : mode === "login" ? "Log in" : "Create account"}</button>
-      <button type="button" style={ghost} onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}>{mode === "login" ? "New here? Create an account" : "Have an account? Log in"}</button>
-      <button type="button" style={{ ...ghost, border: 0, opacity: 0.8 }} onClick={() => { sessionStorage.setItem(GUEST_KEY, "1"); setGuest(true); }}>Continue as guest (demo data)</button>
-    </form>
+    <div className="lp">
+      <section className="lp-l">
+        <div className="brand"><span className="logo"><img src="/icon.svg" alt="" /></span>{title}</div>
+        <div>
+          <h1>Automate the routine, <em>keep the audit trail.</em></h1>
+          <p className="lede">Define a trigger, add conditions and actions, and every run is queued, retried with backoff and recorded step by step in an execution history.</p>
+        </div>
+        <div className="qa" aria-hidden>
+          <div className="q">Webhook: order over the high-value threshold</div>
+          <div className="a">Rule matched. Flagged for review, 3 steps logged.<br /><small>execution history, step timeline</small></div>
+        </div>
+      </section>
+      <section className="lp-r">
+        <div className="col authbox" style={{ gap: 14 }}>
+          <button type="button" className="btn primary" onClick={() => { sessionStorage.setItem(GUEST_KEY, "1"); setGuest(true); }}>Explore without signing up</button>
+          <div className="or">or</div>
+          <form className="col" onSubmit={submit} aria-label="Account">
+            <h2>{mode === "login" ? "Log in" : "Create an account"}</h2>
+            {mode === "register" && <label className="f">Name<input aria-label="Name" value={name} onChange={(e) => setName(e.target.value)} /></label>}
+            <label className="f">Email<input aria-label="Email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+            <label className="f">Password<input aria-label="Password" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} placeholder="8+ characters" required minLength={mode === "register" ? 8 : 1} value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+            {error && <p role="alert" className="err">{error}</p>}
+            <button className="btn" type="submit" disabled={busy}>{busy ? "Please wait..." : mode === "login" ? "Log in" : "Create account"}</button>
+            <button type="button" className="btn ghost sm" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}>{mode === "login" ? "New here? Create an account" : "Have an account? Log in"}</button>
+          </form>
+        </div>
+      </section>
+    </div>
   );
 }
