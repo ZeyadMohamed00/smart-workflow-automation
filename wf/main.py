@@ -173,6 +173,7 @@ def create_app():
 
     @app.get("/executions")
     def executions(cid: str = Depends(client), db=Depends(get_db)):
+        D.ensure_seed(db, cid)
         return [
             ex_out(e)
             for e in db.query(D.Execution)
@@ -183,6 +184,7 @@ def create_app():
 
     @app.get("/stats")
     def stats(cid: str = Depends(client), db=Depends(get_db)):
+        D.ensure_seed(db, cid)
         rows = dict(
             db.query(D.Execution.status, func.count())
             .filter_by(client_id=cid)

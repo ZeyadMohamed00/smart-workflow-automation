@@ -64,7 +64,7 @@ def test_condition_skips_and_matches():
 def test_retry_with_backoff_then_success(monkeypatch):
     monkeypatch.setenv("RETRY_BASE_DELAY", "0")
     n = "retry-client-001"
-    w = wfs(n)["Flaky partner API (retry demo)"]
+    w = wfs(n)["Flaky partner API (retry test)"]
     assert c.post(f"/workflows/{w['id']}/run", headers=H(n)).status_code == 202
     run_tick(n)
     ex = execs(n, w["id"])[0]
