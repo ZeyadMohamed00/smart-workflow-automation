@@ -45,7 +45,7 @@ worker tick: claim queued rows (SELECT ... FOR UPDATE SKIP LOCKED)
 - The `notify` action only records a line; the demo sends no emails or messages. There is no outbound HTTP action (deliberate, to avoid SSRF on a public demo).
 - Webhook URLs contain a random token; there is no signature verification or per-user login. Visitors are separated by a browser id only.
 - Docker files are not verified (no Docker here). GitHub Actions CI runs the tests on every push (`.github/workflows/ci.yml`).
-- Tests: 9 backend (real PostgreSQL, covering conditions, classifier, webhook-to-history, skip/match, retry then success, permanent failure after 3 attempts, schedule once per interval, validation, isolation, cron secret) and 2 frontend. No load testing was done.
+- Tests: 13 backend (real PostgreSQL, covering conditions, classifier, webhook-to-history, skip/match, retry then success, permanent failure after 3 attempts, schedule once per interval, validation, isolation, cron secret) and 2 frontend. No load testing was done.
 
 ## Run
 ```bash
@@ -60,15 +60,28 @@ pytest
 2. **Retries with exponential backoff**: transient failures are retried (0.2s, 0.4s), a permanent failure stops the workflow and keeps every attempt in the history.
 3. **Conditions before actions**: a trigger that does not match is recorded as `skipped`, not silently dropped.
 4. **Triggers**: webhooks enqueue immediately; schedules are enqueued by the worker tick when due, so timing depends on how often the worker runs.
-5. **Honest limits**: no Celery/Redis, keyword "AI", daily cron on the free plan. I know exactly what would change in production: a real worker process, a real broker, an LLM classifier, signed webhooks.
+5. **Honest limits**: no Celery/Redis, keyword "AI", daily cron on the free plan. I know exactly what would change in production: a real worker process, a real broker, an LLM classifier, real queue-backed workers.
 
 ## Accounts and persistence
 - **Real accounts:** `POST /auth/register`, `POST /auth/login`, `GET /auth/me`. Passwords are salted PBKDF2-SHA256 hashes; sessions are signed JWTs (7 days) sent as `Authorization: Bearer`. Set `JWT_SECRET` in production; if it is unset, a secret is derived from `DATABASE_URL`.
 - **Persistence:** a signed-in user's data is stored in PostgreSQL under their own account key (`user:<id>`) and is only reachable with their token. New accounts start empty.
 - **Guest demo:** without logging in, "Continue as guest" uses an anonymous browser id with clearly labeled sample data. Guest ids can never collide with or impersonate an account.
 - Tests: `tests/test_auth.py` (register, login, wrong or weak password, duplicate email, bad token, isolation) and `frontend/src/auth.test.tsx`.
-- Not built: email verification, password reset, rate limiting and refresh tokens (listed as next steps).
+- Login is throttled: 5 wrong passwords per email in 5 minutes returns `429` with `Retry-After` (`LOGIN_MAX_FAILS`, `LOGIN_FAIL_WINDOW_S`). The counter lives in process memory, so each serverless instance counts separately; use a shared limiter for hard guarantees. With `APP_ENV=production` a missing `JWT_SECRET` stops the app at startup.
+- Not built: email verification, password reset and refresh tokens (listed as next steps).
 
 ## Database migrations
 
 Schema changes are versioned with Alembic (`migrations/`, baseline `0001`). Point `DATABASE_URL` at the database and run `alembic upgrade head`. The baseline was generated from the models and checked by running upgrade, downgrade and upgrade again on SQLite; I did not run it against a fresh PostgreSQL instance here. The running app still creates missing tables on start.
+
+## Signed webhooks
+
+Webhook calls can be signed so a leaked URL alone is not enough to trigger a workflow. Each workflow has its own signing key (shown as `webhook_signing_key` in the workflow JSON, derived from the server secret and the workflow token). Sign `"<unix timestamp>.<raw body>"` with HMAC-SHA256:
+
+```bash
+TS=$(date +%s); BODY='{"text":"charged twice"}'
+SIG=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac "$SIGNING_KEY" -hex | sed 's/^.* //')
+curl -X POST "$API/hooks/$TOKEN" -H "X-Webhook-Timestamp: $TS" -H "X-Webhook-Signature: sha256=$SIG" -d "$BODY"
+```
+
+A bad signature or a timestamp older than 5 minutes returns `401` (replay protection). Unsigned calls still work by default so the demo button works; set `WEBHOOK_REQUIRE_SIGNATURE=1` to reject them. Covered by three tests in `tests/test_wf.py`. Code: `wf/signing.py`.

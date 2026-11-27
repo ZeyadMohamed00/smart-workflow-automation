@@ -1,3 +1,4 @@
+import json
 import os
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -7,6 +8,7 @@ from sqlalchemy import func
 
 from . import db as D
 from . import engine as E
+from . import signing
 from .auth import identity
 from .auth import router as auth_router
 
@@ -52,6 +54,7 @@ def wf_out(w):
         "actions": w.actions,
         "enabled": w.enabled,
         "webhook_path": f"/hooks/{w.token}" if w.trigger_type == "webhook" else None,
+        "webhook_signing_key": signing.signing_key(w.token) if w.trigger_type == "webhook" else None,
     }
 
 
@@ -134,12 +137,22 @@ def create_app():
         return ex_out(E.enqueue(db, w, "manual", payload or {}))
 
     @app.post("/hooks/{token}", status_code=202)
-    async def webhook(token: str, request: Request, db=Depends(get_db)):
+    async def webhook(
+        token: str,
+        request: Request,
+        x_webhook_signature: str = Header(default=""),
+        x_webhook_timestamp: str = Header(default=""),
+        db=Depends(get_db),
+    ):
         w = db.query(D.Workflow).filter_by(token=token).first()
         if not w or w.trigger_type != "webhook" or not w.enabled:
             raise HTTPException(404, "Unknown or disabled webhook")
+        raw = await request.body()
+        if x_webhook_signature or signing.required():
+            if not signing.check(token, x_webhook_timestamp, x_webhook_signature, raw):
+                raise HTTPException(401, "Invalid or expired webhook signature")
         try:
-            payload = await request.json()
+            payload = json.loads(raw or b"null")
             if not isinstance(payload, dict):
                 raise ValueError
         except ValueError:

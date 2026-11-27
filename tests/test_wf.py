@@ -134,3 +134,52 @@ def test_isolation_and_cron_secret(monkeypatch):
     monkeypatch.setenv("CRON_SECRET", "s3cret")
     assert c.get("/cron/tick").status_code == 401
     assert c.get("/cron/tick", headers={"Authorization": "Bearer s3cret"}).status_code == 200
+
+
+def _webhook_workflow(n):
+    return next(w for w in wfs(n).values() if w["trigger_type"] == "webhook")
+
+
+def _signed_headers(w, body: bytes, ts=None):
+    import time
+
+    from wf import signing
+
+    ts = int(time.time()) if ts is None else ts
+    token = w["webhook_path"].rsplit("/", 1)[1]
+    return {
+        "X-Webhook-Timestamp": str(ts),
+        "X-Webhook-Signature": signing.sign(token, ts, body),
+        "Content-Type": "application/json",
+    }
+
+
+def test_signed_webhook_accepted_and_tampering_rejected():
+    n = "wfclient-sign-01"
+    w = _webhook_workflow(n)
+    body = b'{"text": "charged twice"}'
+    ok = c.post(w["webhook_path"], content=body, headers=_signed_headers(w, body))
+    assert ok.status_code == 202
+    tampered = c.post(w["webhook_path"], content=b'{"text": "other"}', headers=_signed_headers(w, body))
+    assert tampered.status_code == 401
+    bad = {**_signed_headers(w, body), "X-Webhook-Signature": "sha256=" + "0" * 64}
+    assert c.post(w["webhook_path"], content=body, headers=bad).status_code == 401
+
+
+def test_stale_timestamp_is_rejected_as_replay():
+    import time
+
+    n = "wfclient-sign-02"
+    w = _webhook_workflow(n)
+    body = b'{"x": 1}'
+    old = int(time.time()) - 3600
+    r = c.post(w["webhook_path"], content=body, headers=_signed_headers(w, body, ts=old))
+    assert r.status_code == 401
+
+
+def test_unsigned_allowed_by_default_and_blocked_when_required(monkeypatch):
+    n = "wfclient-sign-03"
+    w = _webhook_workflow(n)
+    assert c.post(w["webhook_path"], json={"a": 1}).status_code == 202
+    monkeypatch.setenv("WEBHOOK_REQUIRE_SIGNATURE", "1")
+    assert c.post(w["webhook_path"], json={"a": 1}).status_code == 401

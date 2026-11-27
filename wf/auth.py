@@ -6,9 +6,12 @@ Signed-in requests send `Authorization: Bearer <token>` and own their data under
 
 import hashlib
 import hmac
+import logging
 import os
 import re
 import secrets
+import time
+from collections import deque
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -22,13 +25,56 @@ from . import db as D
 ALGO = "HS256"
 ITERATIONS = 200_000
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_warned: list[int] = []
+
+log = logging.getLogger(__name__)
+MAX_FAILS = int(os.getenv("LOGIN_MAX_FAILS", "5"))
+FAIL_WINDOW_S = int(os.getenv("LOGIN_FAIL_WINDOW_S", "300"))
+_fails: dict[str, deque] = {}
+
+
+def throttle_check(key: str) -> None:
+    """Block a login key (the email) after MAX_FAILS wrong passwords inside FAIL_WINDOW_S.
+
+    State is in process memory: it stops guessing against one server instance. On a multi-instance or
+    serverless deployment each instance counts separately, so put a shared limiter (Redis, gateway) in
+    front for hard guarantees.
+    """
+    now = time.monotonic()
+    q = _fails.get(key)
+    if not q:
+        return
+    while q and now - q[0] > FAIL_WINDOW_S:
+        q.popleft()
+    if len(q) >= MAX_FAILS:
+        wait = int(FAIL_WINDOW_S - (now - q[0])) + 1
+        raise HTTPException(
+            429, "Too many failed attempts. Try again in a few minutes.", headers={"Retry-After": str(wait)}
+        )
+
+
+def throttle_fail(key: str) -> None:
+    if len(_fails) > 10_000:
+        _fails.clear()
+    _fails.setdefault(key, deque()).append(time.monotonic())
+
+
+def throttle_reset(key: str) -> None:
+    _fails.pop(key, None)
+
 
 
 def _secret() -> str:
     explicit = os.getenv("JWT_SECRET")
     if explicit:
         return explicit
+    if os.getenv("APP_ENV") == "production":
+        raise RuntimeError("JWT_SECRET must be set when APP_ENV=production")
     # No separate secret configured: derive one from the database URL, which is already a secret in deployment.
+    # Set JWT_SECRET explicitly for anything beyond a demo.
+    if not _warned:
+        log.warning("JWT_SECRET is not set; deriving the signing key from DATABASE_URL (demo only)")
+        _warned.append(1)
     seed = os.getenv("DATABASE_URL", "local-dev-only")
     return hashlib.sha256(("jwt:" + seed).encode()).hexdigest()
 
@@ -120,9 +166,13 @@ def register(body: Credentials, db=Depends(_get_db)):
 
 @router.post("/login")
 def login(body: LoginIn, db=Depends(_get_db)):
-    user = db.scalar(select(User).where(User.email == body.email.strip().lower()))
+    key = body.email.strip().lower()
+    throttle_check(key)
+    user = db.scalar(select(User).where(User.email == key))
     if not user or not verify_password(body.password, user.password_hash):
+        throttle_fail(key)
         raise HTTPException(401, "Wrong email or password")
+    throttle_reset(key)
     return _out(user)
 
 

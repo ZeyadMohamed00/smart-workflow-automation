@@ -59,3 +59,16 @@ def test_accounts_start_empty_and_are_isolated():
     assert ra.json() == [] or isinstance(ra.json(), (list, dict))
     spoof = c.get(LIST, headers={"X-Client-Id": "user:1"})
     assert spoof.status_code == 400
+
+
+def test_login_is_throttled_after_repeated_failures_and_recovers_on_success():
+    email, _ = new_user()
+    for _ in range(5):
+        assert c.post("/auth/login", json={"email": email, "password": "bad-password-1"}).status_code == 401
+    blocked = c.post("/auth/login", json={"email": email, "password": "correct-horse-1"})
+    assert blocked.status_code == 429
+    assert int(blocked.headers["retry-after"]) > 0
+    # a different account is not affected
+    other, _ = new_user()
+    ok = c.post("/auth/login", json={"email": other, "password": "correct-horse-1"})
+    assert ok.status_code == 200
